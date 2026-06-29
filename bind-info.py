@@ -1,10 +1,66 @@
+import telebot
+from telebot import types
+import json
+import os
 import requests
-from os import system
-import sys
-import time
-import shutil
+import re
+from urllib.parse import urlparse, parse_qs
 
-def convert(s):
+# ================= CONFIGURATION =================
+BOT_TOKEN = "8847641700:AAFwKwRxC6PEdKSlsYhOHfP1gveLc0oVhTY"
+CHANNEL_URL = "https://t.me/+4NhZQXvSXlVkYjY1"
+ADMIN_1_USERNAME = "sakibblack"
+ADMIN_2_USERNAME = "rx_ebrahim_2_0"
+GITHUB_URL = "https://github.com/black-hacker170"
+DB_FILE = "database.json"
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# ================= DATABASE =================
+def init_db():
+    if not os.path.exists(DB_FILE):
+        with open(DB_FILE, 'w') as f:
+            json.dump({}, f)
+
+def get_user_data(user_id):
+    init_db()
+    with open(DB_FILE, 'r') as f:
+        try:
+            data = json.load(f)
+        except:
+            data = {}
+    return data.get(str(user_id), {})
+
+def save_user_data(user_id, key, value):
+    init_db()
+    with open(DB_FILE, 'r') as f:
+        try:
+            data = json.load(f)
+        except:
+            data = {}
+    if str(user_id) not in data or not isinstance(data[str(user_id)], dict):
+        data[str(user_id)] = {}
+    data[str(user_id)][key] = value
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def delete_user_mail_data(user_id):
+    init_db()
+    with open(DB_FILE, 'r') as f:
+        try:
+            data = json.load(f)
+        except:
+            data = {}
+    if str(user_id) in data and isinstance(data[str(user_id)], dict):
+        data[str(user_id)]["email"] = ""
+        data[str(user_id)]["token"] = ""
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+init_db()
+
+# Helper function to convert seconds to readable format
+def convert_seconds(s):
     try:
         s = int(s)
         d, h = divmod(s, 86400)
@@ -14,499 +70,487 @@ def convert(s):
     except:
         return "0 Day 0 Hour 0 Min 0 Sec"
 
-# Function for typewriter animation effect with custom speed controls
-def animate_print(text, speed=0.03):
-    for char in text:
-        sys.stdout.write(char)
-        sys.stdout.flush()
-        time.sleep(speed)
-    print()
+# ================= MENUS =================
+def main_menu():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("🔧 FF Bind Tools", callback_data="ff_tools"),
+        types.InlineKeyboardButton("📧 Temp Mail", callback_data="temp_mail_menu"),
+        types.InlineKeyboardButton("📢 Channel Link", url=CHANNEL_URL),
+        types.InlineKeyboardButton("👨‍💻 Admin Connect", callback_data="admin_menu"),
+        types.InlineKeyboardButton("📂 GitHub Link", url=GITHUB_URL)
+    )
+    return markup
 
-# Function to center-align and display the welcome box (Kept fast for impact)
-def show_welcome_box():
-    system('clear')
-    G = '\033[92m'  # Neon Green
-    X = '\033[0m'   # Reset
-    
-    try:
-        columns = shutil.get_terminal_size().columns
-    except:
-        columns = 80
+def admin_connect_menu():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("👤 1's Admin Connect", url=f"https://t.me/{ADMIN_1_USERNAME}"),
+        types.InlineKeyboardButton("👤 2's Admin Connect", url=f"https://t.me/{ADMIN_2_USERNAME}"),
+        types.InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="back_main")
+    )
+    return markup
 
-    lines = [
-        " ┌───────────────────────────────────────────┐",
-        "│         「 BLACK TOOL STARTED 」          │",
-        "│      「 HELLO DEAR USER I'M SAKIB 」      │",
-        "│       「 BLACK TOOL WILL PROTECT YOU 」   │",
-        "│              「 GOODBYE 」                │",
-        "│          「 ENJOY OUR BLACK TOOL」        │",
-        " └───────────────────────────────────────────┘"
+def tools_menu():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = [
+        types.InlineKeyboardButton("🔄 1. Bind Change", callback_data="tool_1"),
+        types.InlineKeyboardButton("🗑️ 2. Unbind Email", callback_data="tool_2"),
+        types.InlineKeyboardButton("📊 3. Check Bind Info", callback_data="tool_3"),
+        types.InlineKeyboardButton("❌ 4. Cancel Bind", callback_data="tool_4"),
+        types.InlineKeyboardButton("📧 5. Bind New Email", callback_data="tool_5"),
+        types.InlineKeyboardButton("🔍 6. Check Links", callback_data="tool_6"),
+        types.InlineKeyboardButton("🔐 7. Revoke Token", callback_data="tool_7"),
+        types.InlineKeyboardButton("🚀 8. EAT TO ACCESS", callback_data="tool_8"),
+        types.InlineKeyboardButton("⬅️ Back", callback_data="back_main")
     ]
+    markup.add(*buttons)
+    return markup
+
+def result_menu():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("⬅️ Back to Tools", callback_data="ff_tools"),
+        types.InlineKeyboardButton("🏠 Main Menu", callback_data="back_main")
+    )
+    return markup
+
+def result_menu_with_copy():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("📋 Copy Token", callback_data="copy_generated_token"),
+        types.InlineKeyboardButton("⬅️ Back to Tools", callback_data="ff_tools"),
+        types.InlineKeyboardButton("🏠 Main Menu", callback_data="back_main")
+    )
+    return markup
+
+def security_choice_menu(tool_type):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("✅ Yes (With Code)", callback_data=f"{tool_type}_sec_yes"),
+        types.InlineKeyboardButton("❌ No (No Code/OTP)", callback_data=f"{tool_type}_sec_no"),
+        types.InlineKeyboardButton("⬅️ Back", callback_data="ff_tools")
+    )
+    return markup
+
+def temp_mail_dashboard(email, token):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    inbox_url = f"https://temp-mail.io/en/email/{email}/token/{token}" if email and token else "#"
     
-    print("\n" * 3) 
-    for line in lines:
-        centered_line = line.center(columns)
-        animate_print(f"{G}{centered_line}{X}", speed=0.01) # Faster speed for welcome box
-    
-    print("\n" * 2)
-    time.sleep(2) 
-
-def is_success(rsp):
-    """Check if the API response is truly successful without any nested errors"""
-    if rsp.status_code != 200: 
-        return False
-    try:
-        rj = rsp.json()
-        if not rj.get("success"): 
-            return False
-            
-        data = rj.get("data", {})
-        if isinstance(data, dict):
-            if data.get("error"): 
-                return False
-            g_resp = data.get("garena_response", {})
-            if isinstance(g_resp, dict) and g_resp.get("error"):
-                return False
-                
-        err_node = rj.get("error")
-        if err_node: 
-            return False
-            
-        return True
-    except:
-        return False
-
-def show_res(rsp_json):
-    """Formats the JSON to show only the pure error/success and globally fetched Credit"""
-    try:
-        error_msg = None
-        err_node = rsp_json.get('error')
-        data_node = rsp_json.get('data', {})
-
-        if isinstance(err_node, dict):
-            g_resp = err_node.get('garena_response', {})
-            if isinstance(g_resp, dict) and g_resp.get('error'):
-                error_msg = g_resp.get('error')
-            elif err_node.get('error'):
-                error_msg = err_node.get('error')
-            elif err_node.get('message'):
-                error_msg = err_node.get('message')
-            else:
-                error_msg = str(err_node)
-        elif isinstance(err_node, str):
-            error_msg = err_node
-            
-        if not error_msg and isinstance(data_node, dict):
-            if data_node.get('error'):
-                error_msg = data_node.get('error')
-            elif isinstance(data_node.get('garena_response'), dict) and data_node['garena_response'].get('error'):
-                error_msg = data_node['garena_response']['error']
-                
-        if not error_msg:
-            g_resp = rsp_json.get('garena_response', {})
-            if isinstance(g_resp, dict) and g_resp.get('error'):
-                error_msg = g_resp.get('error')
-
-        if not error_msg and not rsp_json.get('success'):
-            error_msg = rsp_json.get('message') or "Unknown Error"
-
-        if error_msg:
-            animate_print(f"- FaiLEd ! Error : {error_msg}", speed=0.03)
-        else:
-            animate_print("- SuccEss !", speed=0.03)
-            
-        animate_print(f"- DevELopEr : {GLOBAL_MAKER}", speed=0.03)
-        animate_print(f"- TeleGraM  : {GLOBAL_CHANNEL}\n", speed=0.03)
-    except:
-        animate_print("- FaiLEd ! InvaLid ResPonsE\n", speed=0.03)
-
-
-GLOBAL_MAKER = "black"
-GLOBAL_CHANNEL = "https://t.me/sakibblack" 
-
-def fetch_api_credits():
-    global GLOBAL_MAKER, GLOBAL_CHANNEL
-    try:
-        url = "https://chngeforgotcrownx72.vercel.app/otp"
-        rsp = requests.get(url)
-        data = rsp.json()
-        
-        credit = data.get("credit", {})
-        if credit:
-            GLOBAL_MAKER = "black"
-            GLOBAL_CHANNEL = "https://t.me/sakibblack"
-    except:
-        pass 
-
-# Banner display function with smooth typewriter effect
-def display_banner(with_animation=False):
-    G = '\033[92m'  # Neon Green
-    R = '\033[91m'  # Blood Red
-    W = '\033[97m'  # White
-    C = '\033[96m'  # Cyan / Light Blue
-    Y = '\033[93m'  # Yellow
-    X = '\033[0m'   # Reset
-
-    lines = [
-        f"{G}==========================================================================",
-        f"{C} _____   _          _       ____   _  __",
-        f"{C}| __ )  | |        / \     / ___| | |/ /",
-        f"{G}|  _ \  | |       / _ \   | |     | ' / ",
-        f"{G}| |_) | | |___   / ___ \  | |___  | . \ ",
-        f"{C}|____/  |_____| /_/   \_\  \____| |_|\_\  {R}[ WARNING: UNLEASHED ]",
-        f"{G}==========================================================================",
-        f"          {R}[ {W}DEVELOPER: {Y}{GLOBAL_MAKER} {R}| {W}TELEGRAM CONTACT: {C}{GLOBAL_CHANNEL} {R}]{G}",
-        f"=========================================================================={X}"
+    buttons = [
+        types.InlineKeyboardButton("📥 Inbox", callback_data="tm_inbox"),
+        types.InlineKeyboardButton("🔄 Refresh Inbox", callback_data="tm_refresh"),
+        types.InlineKeyboardButton("🔄 Generate New", callback_data="tm_generate"),
+        types.InlineKeyboardButton("🗑 Delete Email", callback_data="tm_delete")
     ]
+    markup.add(*buttons)
+    if email and token:
+        markup.add(types.InlineKeyboardButton("🌐 Open Inbox (Web)", url=inbox_url))
+    markup.add(types.InlineKeyboardButton("🏠 Main Menu", callback_data="back_main"))
+    return markup
 
-    if with_animation:
-        for line in lines:
-            animate_print(line, speed=0.02) # Controlled smooth animation for banner
-    else:
-        for line in lines:
-            print(line)
+# ================= HANDLERS =================
+@bot.message_handler(commands=['start'])
+def start(message):
+    welcome_text = (
+        "👋 *WELCOME TO BLACK TOOL*\n\n"
+        "🔥 *Status:* `⚡ Active`\n"
+        "⚙️ *Version:* `v1.0`\n\n"
+        "👇 _Choose an option from below:_ "
+    )
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=main_menu())
 
-def ChanGE_BinD_WiTh_Sec(access):
-    email = input('\033[92m- EnTer NEw EmaiL : \033[0m')
-    url = "https://chngemailcode48.vercel.app/send_otp"
-    rsp = requests.get(url, params={'access_token': access, 'email': email})
-    
-    if is_success(rsp):
-        show_res(rsp.json())
-        otp = input('\033[92m- OtP => \033[0m')
-        url_v = "https://chngemailcode48.vercel.app/verify_otp"
-        rsp_v = requests.get(url_v, params={'access_token': access, 'email': email, 'otp': otp})
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call):
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+
+    # ---------------- TEMP MAIL LOGIC ----------------
+    if call.data == "temp_mail_menu":
+        bot.answer_callback_query(call.id)
+        user_data = get_user_data(chat_id)
+        email = user_data.get("email")
         
-        if is_success(rsp_v):
-            show_res(rsp_v.json())
-            auth = rsp_v.json().get("verifier_token") or rsp_v.json().get("data", {}).get("verifier_token")
-
-            sec = input('\033[92m- EnTer SecuriTy CodE : \033[0m')
-            url_i = "https://chngemailcode48.vercel.app/verify_identity"
-            rsp_i = requests.get(url_i, params={'access_token': access, 'code': sec})
-            
-            if is_success(rsp_i):
-                show_res(rsp_i.json())
-                iden = rsp_i.json().get("identity_token") or rsp_i.json().get("data", {}).get("identity_token")
-                url_c = "https://chngemailcode48.vercel.app/create_rebind"
-                rsp_c = requests.get(url_c, params={'access_token': access, 'email': email, 'identity_token': iden, 'verifier_token': auth})
-                
-                if is_success(rsp_c):
-                    show_res(rsp_c.json())
-                    animate_print(f'\033[92m- SuccesFuLy ChanGEd To : {email} !\033[0m', speed=0.03)
-                else:
-                    show_res(rsp_c.json())
-            else:
-                show_res(rsp_i.json())
+        if not email:
+            text = "📧 *Temp Mail Bot* - Your privacy is our priority.\n\nআপনি এখনো কোনো ইমেইল জেনারেট করেননি। নিচের বাটনে চাপ দিয়ে ইমেইল তৈরি করুন।"
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("✨ Generate Email", callback_data="tm_generate"))
+            markup.add(types.InlineKeyboardButton("🏠 Main Menu", callback_data="back_main"))
+            bot.edit_message_text(text, chat_id, message_id, parse_mode="Markdown", reply_markup=markup)
         else:
-            show_res(rsp_v.json())
-    else:
-        try: show_res(rsp.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp.status_code}', speed=0.03)
+            text = f"<b>📧 Your Temp Email</b>\n\n<code>{email}</code>"
+            token = user_data.get("token", "")
+            bot.edit_message_text(text, chat_id, message_id, parse_mode="HTML", reply_markup=temp_mail_dashboard(email, token))
 
-def ChanGE_BinD_No_Sec(access):
-    cur_email = input('\033[92m- EnTer CurrenT EmaiL : \033[0m')
-    url1 = "https://chngeforgotcrownx72.vercel.app/otp"
-    rsp1 = requests.get(url1, params={'access_token': access, 'current_email': cur_email})
-    
-    if is_success(rsp1):
-        show_res(rsp1.json())
-        otp1 = input('\033[92m- OtP => \033[0m')
-        url2 = "https://chngeforgotcrownx72.vercel.app/verify"
-        rsp2 = requests.get(url2, params={'access_token': access, 'current_email': cur_email, 'otp': otp1})
-        
-        if is_success(rsp2):
-            show_res(rsp2.json())
-            iden = rsp2.json().get("identity_token") or rsp2.json().get("data", {}).get("identity_token")
-            new_email = input('\033[92m- EnTer NEw EmaiL : \033[0m')
-            url3 = "https://chngeforgotcrownx72.vercel.app/newotp"
-            rsp3 = requests.get(url3, params={'access_token': access, 'new_email': new_email})
-            
-            if is_success(rsp3):
-                show_res(rsp3.json())
-                otp2 = input('\033[92m- OtP => \033[0m')
-                url4 = "https://chngeforgotcrownx72.vercel.app/newverify"
-                rsp4 = requests.get(url4, params={'access_token': access, 'new_email': new_email, 'otp': otp2})
-                
-                if is_success(rsp4):
-                    show_res(rsp4.json())
-                    auth = rsp4.json().get("verifier_token") or rsp4.json().get("data", {}).get("verifier_token")
-                    url5 = "https://chngeforgotcrownx72.vercel.app/change"
-                    rsp5 = requests.get(url5, params={'access_token': access, 'new_email': new_email, 'identity_token': iden, 'verifier_token': auth})
-                    
-                    if is_success(rsp5):
-                        show_res(rsp5.json())
-                        animate_print('\033[92m- SuccesFuLy ForGoT SecuriTy CodE !\033[0m', speed=0.03)
-                    else:
-                        show_res(rsp5.json())
-                else:
-                    show_res(rsp4.json())
-            else:
-                show_res(rsp3.json())
-        else:
-            show_res(rsp2.json())
-    else:
-        try: show_res(rsp1.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp1.status_code}', speed=0.03)
-
-def Bind_Change_Flow(access):
-    animate_print("\n\033[96m- Do you havE your currenT SecuriTy CodE ?\033[0m", speed=0.03)
-    animate_print("\033[96m- EnTer 'y' for YEs (ChanGE wiTh SecuriTy CodE)\033[0m", speed=0.03)
-    animate_print("\033[96m- EnTer 'n' for No  (ForGeT / REsET SecuriTy CodE)\033[0m", speed=0.03)
-    ch = input('\n\033[92m- ChoosE (y/n) : \033[0m').strip().lower()
-    
-    if ch == 'y':
-        print()
-        ChanGE_BinD_WiTh_Sec(access)
-    elif ch == 'n':
-        print()
-        ChanGE_BinD_No_Sec(access)
-    else:
-        animate_print('\033[91m- InvaLid ChoicE !\033[0m', speed=0.03)
-
-def UnBinD_WiTh_Sec(access):
-    sec = input('\033[92m- EnTer SecuriTy CodE : \033[0m')
-    url = "https://crownxnewkey10010.vercel.app/securityunbind"
-    rsp = requests.get(url, params={'access_token': access, 'security_code': sec})
-    
-    if is_success(rsp):
-        show_res(rsp.json())
-        animate_print('\033[92m- UnBinD REquEsT CrEaTEd SuccesFuLy! 15 Days Timer STrarTEd.\033[0m', speed=0.03)
-    else:
-        try: show_res(rsp.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp.status_code}', speed=0.03)
-
-def UnBinD_No_Sec(access):
-    cur_email = input('\033[92m- EnTer CurrenT EmaiL : \033[0m')
-    url1 = "https://chngeforgotcrownx72.vercel.app/otp"
-    rsp1 = requests.get(url1, params={'access_token': access, 'current_email': cur_email})
-    
-    if is_success(rsp1):
-        show_res(rsp1.json())
-        otp = input('\033[92m- OtP => \033[0m')
-        url2 = "https://chngeforgotcrownx72.vercel.app/verify"
-        rsp2 = requests.get(url2, params={'access_token': access, 'current_email': cur_email, 'otp': otp})
-        
-        if is_success(rsp2):
-            show_res(rsp2.json())
-            iden = rsp2.json().get("identity_token") or rsp2.json().get("data", {}).get("identity_token")
-            
-            url3 = "https://crownxforgotremove23.vercel.app/forgotunbind"
-            rsp3 = requests.get(url3, params={'access_token': access, 'identity_token': iden})
-            
-            if is_success(rsp3):
-                show_res(rsp3.json())
-                animate_print('\033[92m- UnBinD REquEsT CrEaTEd SuccesFuLy! 15 Days Timer STrarTEd.\033[0m', speed=0.03)
-            else:
-                show_res(rsp3.json())
-        else:
-            show_res(rsp2.json())
-    else:
-        try: show_res(rsp1.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp1.status_code}', speed=0.03)
-
-def Unbind_Flow(access):
-    animate_print("\n\033[96m- Do you havE your currenT SecuriTy CodE ?\033[0m", speed=0.03)
-    animate_print("\033[96m- EnTer 'y' for YEs (UnBinD wiTh SecuriTy CodE)\033[0m", speed=0.03)
-    animate_print("\033[96m- EnTer 'n' for No  (ForGoT SecuriTy CodE / OTP)\033[0m", speed=0.03)
-    ch = input('\n\033[92m- ChoosE (y/n) : \033[0m').strip().lower()
-    
-    if ch == 'y':
-        print()
-        UnBinD_WiTh_Sec(access)
-    elif ch == 'n':
-        print()
-        UnBinD_No_Sec(access)
-    else:
-        animate_print('\033[91m- InvaLid ChoicE !\033[0m', speed=0.03)
-
-def ChK(access):
-    url = "https://bindinfocrownx612.vercel.app/check"
-    rsp = requests.get(url, params={'access_token': access})
-    if is_success(rsp):
-        data = rsp.json()
-        inner_data = data.get("data", {}) if data.get("data") else data
-        
-        print("")
-        animate_print(f"- sTaTus : {inner_data.get('status', '')}", speed=0.03)
-        animate_print(f"- sTaTus_codE : {inner_data.get('status_code', '')}", speed=0.03)
-        animate_print(f"- summary : {inner_data.get('summary', '')}", speed=0.03)
-        animate_print(f"- counTdown_human : {inner_data.get('countdown_human', '')}", speed=0.03)
-        animate_print(f"- counTdown_sEconds : {inner_data.get('countdown_seconds', '')}", speed=0.03)
-        animate_print(f"- currenT_EmaiL : {inner_data.get('current_email', '')}", speed=0.03)
-        animate_print(f"- pEndinG_EmaiL : {inner_data.get('pending_email', '')}", speed=0.03)
-        animate_print(f"- EmaiL_To_bE : {inner_data.get('email_to_be', '')}", speed=0.03)
-        animate_print(f"- mobiLE : {inner_data.get('mobile', '')}", speed=0.03)
-        animate_print(f"- rEquEsT_ExEc_counTdown : {inner_data.get('request_exec_countdown', '')}", speed=0.03)
-        animate_print(f"- rEsuLT : {inner_data.get('result', '')}", speed=0.03)
-        animate_print(f"- EmaiL : {inner_data.get('email', '')}", speed=0.03)
-        animate_print(f"- mobiLE_To_bE : {inner_data.get('mobile_to_be', '')}", speed=0.03)
-        
-        email = inner_data.get("email", "")
-        email_to_be = inner_data.get("email_to_be", "")
-        countdown = inner_data.get("request_exec_countdown", 0)
-        
-        print("")
-        if email == "" and email_to_be != "":
-            animate_print(f"- ConFirmEd in : {convert(countdown)}", speed=0.03)
-        elif email != "" and email_to_be == "":
-            animate_print(f"- ConFirmEd : YEs Good !", speed=0.03)
-        elif email == "" and email_to_be == "":
-            animate_print(f"- No IsTi3ada !", speed=0.03)
-            
-        print("")
-        animate_print(f"- DevELopEr : {GLOBAL_MAKER}", speed=0.03)
-        animate_print(f"- TeleGraM  : {GLOBAL_CHANNEL}", speed=0.03)
-    else:
-        try: show_res(rsp.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp.status_code}', speed=0.03)
-
-def CancEL(access):
-    url = "https://bindcnclcrownx34.vercel.app/cancelbind"
-    rsp = requests.get(url, params={'access_token': access})
-    if is_success(rsp):
-        show_res(rsp.json())
-        animate_print('\033[92m- SuccesFuLy CanceLEd BinD !\033[0m', speed=0.03)
-    else:
-        try: show_res(rsp.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp.status_code}', speed=0.03)
-
-def BinD_NEw(email, access):
-    url = "https://bindcnclcrownx34.vercel.app/bind"
-    rsp = requests.get(url, params={'access_token': access, 'email': email})
-    if is_success(rsp):
-        show_res(rsp.json())
-        otp = input('\033[92m- OtP => \033[0m')
-        sec = input('\033[92m- EnTer SecuriTy CodE : \033[0m')
-        url_c = "https://bindcnclcrownx34.vercel.app/confirmbind"
-        rsp_c = requests.get(url_c, params={'access_token': access, 'email': email, 'otp': otp, 'security_code': sec})
-        if is_success(rsp_c):
-            show_res(rsp_c.json())
-            animate_print(f'\033[92m- SuccesFuLy AddinG : {email} To AccounT !\033[0m', speed=0.03)
-        else:
-            show_res(rsp_c.json())
-    else:
-        try: show_res(rsp.json())
-        except: animate_print(f'- FaiLEd ! HTTP : {rsp.status_code}', speed=0.03)
-
-def GeT_PLaFTroms(t):
-    r = requests.get("https://100067.connect.garena.com/bind/app/platform/info/get",
-      params={'access_token': t},
-      headers={'User-Agent':"GarenaMSDK/4.0.19P9(Redmi Note 5 ;Android 9;en;US;)","Connection":"Keep-Alive","Accept-Encoding":"gzip","If-Modified-Since":"Sun, 18 May 2025 09:37:03 GMT"})
-    if r.status_code not in[200,201]: 
-        return animate_print("Failed to fetch.", speed=0.03)
-    j = r.json()
-    m = {3:"Facebook", 8:"Gmail", 10:"iCloud", 5:"VK", 11:"Twitter", 7:"Huawei"}
-    b, a = j.get("bounded_accounts",[]), j.get("available_platforms",[])
-    animate_print("\033[97m> SEcondary LinKs : <\033[0m", speed=0.03)
-    l = False
-    for x in b:
+    elif call.data == "tm_generate":
+        bot.answer_callback_query(call.id, "Generating Email...")
         try:
-            p = x.get('platform')
-            u = x.get('uid')
-            uinfo = x.get('user_info', {})
-            e = uinfo.get('email', '')
-            n = uinfo.get('nickname', '')
-            if p in m:
-                animate_print(f"\n\033[92m=> {m[p]} !\033[0m", speed=0.03)
-                if e: animate_print(f"- Email : {e}", speed=0.03)
-                if n: animate_print(f"- Email NamE : {n}", speed=0.03)
-                print()
-                l = True
-        except: 
-            continue
-    if not l: 
-        animate_print("\033[93m=> Secondary Links Not Found ! \033[0m", speed=0.03)
-        
-    for k in m:
-        if k not in a:
-            animate_print(f"\n\033[96m> Main Platform => {m[k]} ! <\033[0m", speed=0.03)
-            break
-
-def Revoke_Token(access):
-    url = "https://crownxrevoker73.vercel.app/revoke"
-    rsp = requests.get(url, params={'access_token': access})
-    try:
-        rj = rsp.json()
-        
-        if rj.get("success"):
-            animate_print("\033[92m- SuccEsFuLy RevoKEd AccEss ToKeN !\033[0m", speed=0.03)
-        else:
-            err = rj.get("error", {}).get("garena_response", {}).get("error", "Unknown")
-            animate_print(f"\033[91m- FaiLEd To RevoKe ! Error : {err}\033[0m", speed=0.03)
-            
-        animate_print(f"- DevELopEr : {GLOBAL_MAKER}", speed=0.03)
-        animate_print(f"- TeleGraM  : {GLOBAL_CHANNEL}\n", speed=0.03)
-    except:
-        animate_print(f"\033[91m- FaiLEd ! HTTP : {rsp.status_code}\n\033[0m", speed=0.03)
-
-def MenU():
-    show_welcome_box() 
-    fetch_api_credits()
-    
-    first_run = True
-    
-    while True:
-        system('clear')
-        
-        G = '\033[92m'  # Neon Green
-        R = '\033[91m'  # Blood Red
-        W = '\033[97m'  # White
-        Y = '\033[93m'  # Yellow
-        X = '\033[0m'   # Reset
-        
-        if first_run:
-            display_banner(with_animation=True)
-            first_run = False
-        else:
-            display_banner(with_animation=False)
-        
-        # Options List
-        print(f" {G}[1]{X} - Bind ChangE")
-        print(f" {G}[2]{X} - UnBinD EmaiL")
-        print(f" {G}[3]{X} - ChEcK BinD InFo")
-        print(f" {G}[4]{X} - CanCeL MaiL BinD")
-        print(f" {G}[5]{X} - BinD NEw EmaiL")
-        print(f" {G}[6]{X} - ChEcK LinKs")
-        print(f" {G}[7]{X} - RevoKe AccEss ToKeN")
-        print(f" {R}[0]{X} - ExiT")
-        print(f"{G}=========================================================================={X}")
-        
-        sH = input(f'\n{G}ChoosE : {X}').strip()
-        
-        if sH in ['1', '2', '3', '4', '6', '7']:
-            system('clear')
-            display_banner(with_animation=True)
-            token = input(f'{G}- EnTer AccEss ToKeN : {X}')
-            
-            if sH == '1':
-                Bind_Change_Flow(token)
-            elif sH == '2':
-                Unbind_Flow(token)
-            elif sH == '3':
-                ChK(token)
-            elif sH == '4':
-                CancEL(token)
-            elif sH == '6':
-                GeT_PLaFTroms(token)
-            elif sH == '7':
-                Revoke_Token(token)
+            res = requests.post("https://api.internal.temp-mail.io/api/v3/email/new", json={
+                "min_name_length": 10,
+                "max_name_length": 10
+            }, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                email = data.get("email")
+                token = data.get("token")
                 
-        elif sH == '5':
-            system('clear')
-            display_banner(with_animation=True)
-            new_mail = input(f'{G}- EnTer NeW EmaiL : {X}')
-            token = input(f'{G}- EnTer AccEss ToKeN : {X}')
-            BinD_NEw(new_mail, token)
-            
-        elif sH == '0':
-            system('clear')
-            exit(f'{R}- ExiTing !{X}')
-        else:
-            animate_print(f'{R}- No ChoosinG !{X}', speed=0.03)
-            
-        input(f'\n{Y}- PrEss EnTer To REturn To Main MEnu...{X}')
+                save_user_data(chat_id, "email", email)
+                save_user_data(chat_id, "token", token)
+                
+                text = f"<b>📧 Your Temp Email</b>\n\n<code>{email}</code>"
+                bot.edit_message_text(text, chat_id, message_id, parse_mode="HTML", reply_markup=temp_mail_dashboard(email, token))
+            else:
+                bot.send_message(chat_id, "❌ API Error. Try again.")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Error: {str(e)}")
 
-if __name__ == "__main__":
-    MenU()
-                                                                                                              
+    elif call.data in ["tm_inbox", "tm_refresh"]:
+        bot.answer_callback_query(call.id, "Checking Inbox...")
+        user_data = get_user_data(chat_id)
+        email = user_data.get("email")
+        token = user_data.get("token", "")
+        
+        if not email:
+            bot.send_message(chat_id, "❌ No active email found")
+            return
+            
+        try:
+            res = requests.get(f"https://api.internal.temp-mail.io/api/v3/email/{email}/messages", timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                if not data or len(data) == 0:
+                    bot.send_message(chat_id, "📭 No messages yet.")
+                    return
+                
+                found = False
+                for msg in data:
+                    if not msg.get("body_text") and not msg.get("subject") and not msg.get("from"):
+                        continue
+                    
+                    found = True
+                    msg_from = msg.get("from", "Unknown")
+                    subject = msg.get("subject", "No Subject")
+                    body = msg.get("body_text", "Empty")
+                    
+                    text = (
+                        "<b>📩 New Message</b>\n\n"
+                        f"<b>From:</b> {msg_from}\n"
+                        f"<b>Subject:</b> {subject}\n\n"
+                        f"<b>Message:</b>\n<code>{body}</code>"
+                    )
+                    bot.send_message(chat_id, text, parse_mode="HTML")
+                
+                if not found:
+                    bot.send_message(chat_id, "📭 No real messages yet.")
+            else:
+                bot.send_message(chat_id, "❌ Failed to load inbox")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Error: {str(e)}")
+
+    elif call.data == "tm_delete":
+        bot.answer_callback_query(call.id)
+        delete_user_mail_data(chat_id)
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("✨ Generate New Email", callback_data="tm_generate"))
+        markup.add(types.InlineKeyboardButton("🏠 Main Menu", callback_data="back_main"))
+        
+        bot.edit_message_text("🗑 Temp email deleted", chat_id, message_id, reply_markup=markup)
+
+    # ---------------- ORIGINAL BOT LOGIC ----------------
+    elif call.data == "ff_tools":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text("🔧 *Select a Free Fire Tool:*", chat_id, message_id, parse_mode="Markdown", reply_markup=tools_menu())
+    
+    elif call.data == "admin_menu":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text("👨‍💻 *Select an Admin to Connect:*", chat_id, message_id, parse_mode="Markdown", reply_markup=admin_connect_menu())
+    
+    elif call.data == "back_main":
+        bot.answer_callback_query(call.id)
+        welcome_text = (
+            "👋 *WELCOME TO BLACK TOOL*\n\n"
+            "🔥 *Status:* `⚡ Active`\n"
+            "⚙️ *Version:* `v1.0`\n\n"
+            "👇 _Choose an option from below:_ "
+        )
+        bot.edit_message_text(welcome_text, chat_id, message_id, parse_mode="Markdown", reply_markup=main_menu())
+
+    elif call.data == "copy_generated_token":
+        bot.answer_callback_query(call.id, text="🎯 Extracting Token...")
+        msg_text = call.message.text
+        
+        token_match = re.search(r'([a-f0-9]{32,64})', msg_text)
+        if token_match:
+            clean_token = token_match.group(1)
+            bot.send_message(chat_id, f"`{clean_token}`", parse_mode="Markdown")
+        else:
+            bot.send_message(chat_id, "❌ Token extraction failed. Please copy manually.")
+
+    elif call.data in ["t1_sec_yes", "t1_sec_no", "t2_sec_yes", "t2_sec_no"]:
+        bot.answer_callback_query(call.id)
+        msg = bot.send_message(chat_id, "🔑 *Please Enter Your Access Token:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, route_security_flow, call.data)
+
+    elif call.data.startswith("tool_"):
+        bot.answer_callback_query(call.id)
+        if call.data == "tool_1":
+            bot.send_message(chat_id, "⚙️ *Do you have your current Security Code?*", parse_mode="Markdown", reply_markup=security_choice_menu("t1"))
+        elif call.data == "tool_2":
+            bot.send_message(chat_id, "⚙️ *Do you have your current Security Code?*", parse_mode="Markdown", reply_markup=security_choice_menu("t2"))
+        elif call.data == "tool_8":
+            msg = bot.send_message(chat_id, "📥 *Please Paste Your EAT Token or Full URL Here:*", parse_mode="Markdown")
+            bot.register_next_step_handler(msg, run_tool_logic, call.data)
+        elif call.data == "tool_5":
+            msg = bot.send_message(chat_id, "📧 *Enter New Email for Binding:*", parse_mode="Markdown")
+            bot.register_next_step_handler(msg, tool_5_get_email)
+        else:
+            msg = bot.send_message(chat_id, "🔑 *Please Enter Your Access Token:*", parse_mode="Markdown")
+            bot.register_next_step_handler(msg, run_tool_logic, call.data)
+
+# ================= CORE LOGIC ROUTER =================
+def route_security_flow(message, flow_type):
+    token = message.text.strip()
+    chat_id = message.chat.id
+
+    if flow_type == "t1_sec_yes":
+        msg = bot.send_message(chat_id, "📧 *Enter New Email Address:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, t1_yes_step1, token)
+    elif flow_type == "t1_sec_no":
+        msg = bot.send_message(chat_id, "📧 *Enter Current Email Address:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, t1_no_step1, token)
+    elif flow_type == "t2_sec_yes":
+        msg = bot.send_message(chat_id, "🔐 *Enter Security Code:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, t2_yes_final, token)
+    elif flow_type == "t2_sec_no":
+        msg = bot.send_message(chat_id, "📧 *Enter Current Email Address:*", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, t2_no_step1, token)
+
+# --- TOOL 1: Bind Change With Security ---
+def t1_yes_step1(message, token):
+    email = message.text.strip()
+    res = requests.get("https://chngemailcode48.vercel.app/send_otp", params={'access_token': token, 'email': email})
+    if res.status_code == 200:
+        msg = bot.send_message(message.chat.id, "📩 *OTP Sent.* Enter OTP:")
+        bot.register_next_step_handler(msg, t1_yes_step2, token, email)
+    else:
+        bot.send_message(message.chat.id, f"❌ Failed. Error: {res.text}", reply_markup=result_menu())
+
+def t1_yes_step2(message, token, email):
+    otp = message.text.strip()
+    res = requests.get("https://chngemailcode48.vercel.app/verify_otp", params={'access_token': token, 'email': email, 'otp': otp})
+    try:
+        auth = res.json().get("verifier_token") or res.json().get("data", {}).get("verifier_token")
+        if auth:
+            msg = bot.send_message(message.chat.id, "🔐 *Enter Security Code:*")
+            bot.register_next_step_handler(msg, t1_yes_step3, token, email, auth)
+            return
+    except:
+        pass
+    bot.send_message(message.chat.id, "❌ Invalid OTP or Error response.", reply_markup=result_menu())
+
+def t1_yes_step3(message, token, email, auth):
+    sec = message.text.strip()
+    res = requests.get("https://chngemailcode48.vercel.app/verify_identity", params={'access_token': token, 'code': sec})
+    try:
+        iden = res.json().get("identity_token") or res.json().get("data", {}).get("identity_token")
+        if iden:
+            res_c = requests.get("https://chngemailcode48.vercel.app/create_rebind", params={'access_token': token, 'email': email, 'identity_token': iden, 'verifier_token': auth})
+            bot.send_message(message.chat.id, f"📡 *Result:* {res_c.text}", reply_markup=result_menu())
+            return
+    except:
+        pass
+    bot.send_message(message.chat.id, "❌ Identity verification failed.", reply_markup=result_menu())
+
+# --- TOOL 1: Bind Change No Security ---
+def t1_no_step1(message, token):
+    cur_email = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/otp", params={'access_token': token, 'current_email': cur_email})
+    msg = bot.send_message(message.chat.id, "📩 *Current Email OTP Request Sent.* Enter OTP:")
+    bot.register_next_step_handler(msg, t1_no_step2, token, cur_email)
+
+def t1_no_step2(message, token, cur_email):
+    otp = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/verify", params={'access_token': token, 'current_email': cur_email, 'otp': otp})
+    try:
+        iden = res.json().get("identity_token") or res.json().get("data", {}).get("identity_token")
+        if iden:
+            msg = bot.send_message(message.chat.id, "📧 *Enter New Email Address:*")
+            bot.register_next_step_handler(msg, t1_no_step3, token, iden)
+            return
+    except:
+        pass
+    bot.send_message(message.chat.id, "❌ Verification failed.", reply_markup=result_menu())
+
+def t1_no_step3(message, token, iden):
+    new_email = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/newotp", params={'access_token': token, 'new_email': new_email})
+    msg = bot.send_message(message.chat.id, f"📩 *New Email OTP Sent to {new_email}.* Enter OTP:")
+    bot.register_next_step_handler(msg, t1_no_step4, token, iden, new_email)
+
+def t1_no_step4(message, token, iden, new_email):
+    otp2 = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/newverify", params={'access_token': token, 'new_email': new_email, 'otp': otp2})
+    try:
+        auth = res.json().get("verifier_token") or res.json().get("data", {}).get("verifier_token")
+        if auth:
+            res_f = requests.get("https://chngeforgotcrownx72.vercel.app/change", params={'access_token': token, 'new_email': new_email, 'identity_token': iden, 'verifier_token': auth})
+            bot.send_message(message.chat.id, f"📡 *Result:* {res_f.text}", reply_markup=result_menu())
+            return
+    except:
+        pass
+    bot.send_message(message.chat.id, "❌ Process failed.", reply_markup=result_menu())
+
+# --- TOOL 2: Unbind With Security ---
+def t2_yes_final(message, token):
+    sec = message.text.strip()
+    res = requests.get("https://crownxnewkey10010.vercel.app/securityunbind", params={'access_token': token, 'security_code': sec})
+    bot.send_message(message.chat.id, f"📡 *Unbind Result:* {res.text}", reply_markup=result_menu())
+
+# --- TOOL 2: Unbind No Security ---
+def t2_no_step1(message, token):
+    cur_email = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/otp", params={'access_token': token, 'current_email': cur_email})
+    msg = bot.send_message(message.chat.id, "📩 *OTP Request Sent.* Enter OTP:")
+    bot.register_next_step_handler(msg, t2_no_step2, token, cur_email)
+
+def t2_no_step2(message, token, cur_email):
+    otp = message.text.strip()
+    res = requests.get("https://chngeforgotcrownx72.vercel.app/verify", params={'access_token': token, 'current_email': cur_email, 'otp': otp})
+    try:
+        iden = res.json().get("identity_token") or res.json().get("data", {}).get("identity_token")
+        if iden:
+            res3 = requests.get("https://crownxforgotremove23.vercel.app/forgotunbind", params={'access_token': token, 'identity_token': iden})
+            bot.send_message(message.chat.id, f"📡 *Result:* {res3.text}", reply_markup=result_menu())
+            return
+    except:
+        pass
+    bot.send_message(message.chat.id, "❌ Unbind Process Failed.", reply_markup=result_menu())
+
+# --- TOOL 5: Bind New Email ---
+def tool_5_get_email(message):
+    email = message.text.strip()
+    msg = bot.send_message(message.chat.id, "🔑 *Now Enter Your Access Token:*", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, tool_5_send_otp, email)
+
+def tool_5_send_otp(message, email):
+    token = message.text.strip()
+    res = requests.get("https://bindcnclcrownx34.vercel.app/bind", params={'access_token': token, 'email': email})
+    msg = bot.send_message(message.chat.id, "📩 *OTP Sent.* Enter OTP:")
+    bot.register_next_step_handler(msg, tool_5_get_sec, token, email)
+
+def tool_5_get_sec(message, token, email):
+    otp = message.text.strip()
+    msg = bot.send_message(message.chat.id, "🔐 *Enter Security Code:*")
+    bot.register_next_step_handler(msg, tool_5_final, token, email, otp)
+
+def tool_5_final(message, token, email, otp):
+    sec = message.text.strip()
+    res_c = requests.get("https://bindcnclcrownx34.vercel.app/confirmbind", params={'access_token': token, 'email': email, 'otp': otp, 'security_code': sec})
+    bot.send_message(message.chat.id, f"📡 *Result:* {res_c.text}", reply_markup=result_menu())
+
+# ================= CORE HANDLER FOR GENERAL TOOLS =================
+def run_tool_logic(message, tool_id):
+    user_input = message.text.strip()
+    user_id = message.chat.id
+    
+    bot.send_message(user_id, "⏳ *Processing your request... Please wait*", parse_mode="Markdown")
+
+    if tool_id == "tool_8":
+        clean_token = user_input
+        if "eat=" in user_input:
+            try:
+                if "http" in user_input:
+                    parsed_url = urlparse(user_input)
+                    clean_token = parse_qs(parsed_url.query).get('eat', [user_input])[0]
+                else:
+                    clean_token = parse_qs(user_input).get('eat', [user_input])[0]
+            except Exception:
+                clean_token = user_input
+
+        try:
+            api_url = "https://project-m0dtj.vercel.app/token"
+            res = requests.get(api_url, params={'eat_token': clean_token}, timeout=20)
+            if res.status_code == 200:
+                bot.send_message(user_id, f"🎉 Success!\n\n📡 API Result:\n\n{res.text}", reply_markup=result_menu_with_copy())
+            else:
+                bot.send_message(user_id, f"❌ *API Error:* `Code {res.status_code}`", parse_mode="Markdown", reply_markup=result_menu())
+        except Exception as e:
+            bot.send_message(user_id, f"⚠️ *Error Occurred:* `{e}`", parse_mode="Markdown", reply_markup=result_menu())
+
+    elif tool_id == "tool_3":
+        try:
+            res = requests.get("https://bindinfocrownx612.vercel.app/check", params={'access_token': user_input}, timeout=10)
+            if res.status_code == 200:
+                d = res.json().get("data", res.json())
+                
+                email = d.get("email", "")
+                email_to_be = d.get("email_to_be", "")
+                countdown = d.get("request_exec_countdown", 0)
+                
+                istikhada_status = "No Isti3ada !"
+                if email == "" and email_to_be != "":
+                    istikhada_status = f"Confirmed in : {convert_seconds(countdown)}"
+                elif email != "" and email_to_be == "":
+                    istikhada_status = "Confirmed : Yes Good !"
+
+                output = (
+                    f"📊 *FF BIND INFO RESULT*\n\n"
+                    f"🔹 *Status:* `{d.get('status', 'N/A')}`\n"
+                    f"🔹 *Summary:* `{d.get('summary', 'N/A')}`\n"
+                    f"🔹 *Current Email:* `{d.get('current_email', 'N/A')}`\n"
+                    f"🔹 *Pending Email:* `{d.get('pending_email', 'N/A')}`\n"
+                    f"🔹 *Human Countdown:* `{d.get('countdown_human', 'N/A')}`\n"
+                    f"🔹 *Mobile:* `{d.get('mobile', 'N/A')}`\n\n"
+                    f"ℹ️ *Istikhada:* `{istikhada_status}`"
+                )
+                bot.send_message(user_id, output, parse_mode="Markdown", reply_markup=result_menu())
+            else:
+                bot.send_message(user_id, f"❌ *Failed!* HTTP Code: {res.status_code}", parse_mode="Markdown", reply_markup=result_menu())
+        except Exception as e:
+            bot.send_message(user_id, f"⚠️ *Error:* `{e}`", parse_mode="Markdown", reply_markup=result_menu())
+
+    elif tool_id == "tool_4":
+        try:
+            res = requests.get("https://bindcnclcrownx34.vercel.app/cancelbind", params={'access_token': user_input})
+            bot.send_message(user_id, f"📡 *Result:* {res.text}", reply_markup=result_menu())
+        except Exception as e:
+            bot.send_message(user_id, f"⚠️ *Error:* `{e}`", parse_mode="Markdown", reply_markup=result_menu())
+
+    elif tool_id == "tool_6":
+        try:
+            r = requests.get("https://100067.connect.garena.com/bind/app/platform/info/get",
+                             params={'access_token': user_input},
+                             headers={'User-Agent': "GarenaMSDK/4.0.19P9(Redmi Note 5 ;Android 9;en;US;)"}, timeout=15)
+            if r.status_code in [200, 201]:
+                j = r.json()
+                m = {3: "Facebook", 8: "Gmail", 10: "iCloud", 5: "VK", 11: "Twitter", 7: "Huawei"}
+                b, a = j.get("bounded_accounts", []), j.get("available_platforms", [])
+                
+                output = "🔍 *SECONDARY LINKS INFO*\n\n"
+                found_links = False
+                for x in b:
+                    p = x.get('platform')
+                    uinfo = x.get('user_info', {})
+                    if p in m:
+                        output += f"🌐 *Platform:* `{m[p]}`\n📧 *Email:* `{uinfo.get('email', 'N/A')}`\n👤 *Name:* `{uinfo.get('nickname', 'N/A')}`\n\n"
+                        found_links = True
+                if not found_links:
+                    output += "⚠️ *Secondary Links Not Found !*"
+                
+                bot.send_message(user_id, output, parse_mode="Markdown", reply_markup=result_menu())
+            else:
+                bot.send_message(user_id, f"❌ *Failed!* HTTP Code: {r.status_code}", parse_mode="Markdown", reply_markup=result_menu())
+        except Exception as e:
+            bot.send_message(user_id, f"⚠️ *Error:* `{e}`", parse_mode="Markdown", reply_markup=result_menu())
+
+    elif tool_id == "tool_7":
+        try:
+            bot.send_message(user_id, "🔧 *Tool 7 Logic is under development.*", parse_mode="Markdown", reply_markup=result_menu())
+        except Exception as e:
+            bot.send_message(user_id, f"⚠️ *Error:* `{e}`", parse_mode="Markdown", reply_markup=result_menu())
+
+# ================= START BOT POLLING =================
+if __name__ == '__main__':
+    print("Bot is starting...")
+    bot.infinity_polling()
